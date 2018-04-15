@@ -90,31 +90,23 @@ def load_dataset(max_length, max_n_examples, fn, tokenize=False, max_vocab_size=
 
     lines = []
 
-    finished = False
-
-    for i in range(99):
         #path = data_dir+("/training-monolingual.tokenized.shuffled/news.en-{}-of-00100".format(str(i+1).zfill(5)))
-        path = data_dir+"/"+fn
-        
-        with open(path, 'r', encoding='ISO-8859-1') as f:
-            for line in f:
-                line = line[:-1]
-                if tokenize:
-                    line = tokenize_string(line)
-                else:
-                    line = tuple(line)
+    path = data_dir+"/"+fn
+    print(path)
+    with open(path, 'r', encoding='ISO-8859-1') as f:
+        for line in f:
+            line = line[:-1]
+            if tokenize:
+                line = tokenize_string(line)
+            else:
+                line = tuple(line)
 
-                if len(line) > max_length:
-                    line = line[:max_length]
+            if len(line) > max_length:
+                line = line[:max_length]
 
-                lines.append(line + ( ("`",)*(max_length-len(line)) ) )
+            lines.append(line + ( ("`",)*(max_length-len(line)) ) )
 
-                if len(lines) == max_n_examples:
-                    finished = True
-                    break
 
-        if finished:
-            break
 
     np.random.shuffle(lines)
 

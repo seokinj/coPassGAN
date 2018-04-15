@@ -26,30 +26,30 @@ if use_cuda:
 # fill in the path to the extracted files here!
 DATA_DIR = '/Volumes/Transcend/text'
 
-fn1 = 'rockyou-train.txt'
-fn2 = 'rockyou-train.txt'
+fn1 = '1class8.txt'
+fn2 = '3class12.txt'
 #fn2 = '68_linkedin_found_hash_plain.txt'
 
 if len(DATA_DIR) == 0:
     raise Exception('Please specify path to data directory in gan_language.py!')
 
 BATCH_SIZE = 64 # Batch size
-ITERS = 1000 # How many iterations to train for
+ITERS = 199000 # How many iterations to train for
 SEQ_LEN = 12 # Sequence length in characters
-DIM = 12 # Model dimensionality. This is fairly slow and overfits, even on
+DIM = 128 # Model dimensionality. This is fairly slow and overfits, even on
           # Billion Word. Consider decreasing for smaller datasets.
 CRITIC_ITERS = 10 # How many critic iterations per generator iteration. We
                   # use 10 for the results in the paper, but 5 should work fine
                   # as well.
 LAMBDA = 10 # Gradient penalty lambda hyperparameter.
-MAX_N_EXAMPLES = 10000000#10000000 # Max number of data examples to load. If data loading
+MAX_N_EXAMPLES = 100000000#10000000 # Max number of data examples to load. If data loading
                           # is too slow or takes too much RAM, you can decrease
                           # this (at the expense of having less training data).
 
 
 lib.print_model_settings(locals().copy())
 try:
-    with open(DATA_DIR+'/train-data1.txt', 'rb', encoding='ISO-8859-1') as f:
+    with open(DATA_DIR+'/1class8.dump', 'rb') as f:
         p = pickle.load(f)
         lines1 = p['lines']
         charmap1 = p['charmap']
@@ -61,12 +61,12 @@ except:
         data_dir=DATA_DIR,
         fn = fn1
     )
-    with open(DATA_DIR+"/train-data1.txt", 'wb') as f:
+    with open(DATA_DIR+"/1class8.dump", 'wb') as f:
         pickle.dump({'lines':lines1, 'charmap':charmap1, 'inv_charmap':inv_charmap1}, f)
-print(charmap1)
+#print(charmap1)
 
 try:                  ### Change for real test!!!###
-    with open(DATA_DIR+'/train-data1.txt', 'rb', encoding='ISO-8859-1') as f:
+    with open(DATA_DIR+'/3class12.dump', 'rb') as f:
         p = pickle.load(f)
         lines2 = p['lines']
         charmap2 = p['charmap']
@@ -78,10 +78,9 @@ except:
         data_dir=DATA_DIR,
         fn = fn2
     )
-    with open(DATA_DIR+"/train-data2.txt", 'wb') as f:
+    with open(DATA_DIR+"/3class12.dump", 'wb') as f:
         pickle.dump({'lines':lines2, 'charmap':charmap2, 'inv_charmap':inv_charmap2}, f)
-print(charmap2)
-
+#print(charmap2)
 
 table1 = np.arange(len(charmap1)).reshape(-1, 1) # (len(charmap), 1)
 one_hot1 = OneHotEncoder()
@@ -192,6 +191,8 @@ data_B = inf_train_gen(lines2, charmap2)
 # distributions for n=1,2,3,4. To get an idea of the optimal values, we
 # evaluate these statistics on a held-out set first.
 
+
+
 """
 true_char_ngram_lms = [language_helpers.NgramLanguageModel(i+1, lines[10*BATCH_SIZE:], tokenize=False) for i in range(4)]
 validation_char_ngram_lms = [language_helpers.NgramLanguageModel(i+1, lines[:10*BATCH_SIZE], tokenize=False) for i in range(4)]
@@ -214,6 +215,7 @@ except:
     with open('data/char_ngram', 'wb') as f:
         pickle.dump({'tcnl':true_char_ngram_lms, 'vcnl':validation_char_ngram_lms}, f)
 """
+
 
 for iteration in range(ITERS):
     start_time = time.time()
@@ -269,6 +271,7 @@ for iteration in range(ITERS):
         D_fake_B = netD_B(inputBv)
         D_fake_B = D_fake_B.mean()
         # TODO: Waiting for the bug fix from pytorch
+        D_fake_A.backward(one)
         D_fake_B.backward(one)
 
         # train with gradient penalty
@@ -300,6 +303,7 @@ for iteration in range(ITERS):
     if use_cuda:
         noise = noise.cuda(gpu)
     noisev = autograd.Variable(noise)
+
     fake_A = netG_A(noisev)
     G_A = netD_A(fake_A)
     G_A = G_A.mean()
@@ -324,8 +328,9 @@ for iteration in range(ITERS):
     lib.plot.plot('tmp/lang/wasserstein distance A', Wasserstein_D_A.cpu().data.numpy())
     lib.plot.plot('tmp/lang/wasserstein distance B', Wasserstein_D_B.cpu().data.numpy())
 
-                     #######99
-    if iteration % 100 == 1:
+                     
+    if iteration % 100 == 99:
+        print(iteration+1)
         samples1 = []
         samples2 = []
         noise = torch.randn(BATCH_SIZE, 128)
@@ -336,21 +341,17 @@ for iteration in range(ITERS):
         for i in range(10):
             samples1.extend(generate_samples(netG_A, charmap1, inv_charmap1, noisev))
             samples2.extend(generate_samples(netG_B, charmap2, inv_charmap2, noisev))
-
-        """
-        for i in range(4):
-            lm = language_helpers.NgramLanguageModel(i+1, samples, tokenize=False)
-            lib.plot.plot('tmp/lang/js{}'.format(i+1), lm.js_with(true_char_ngram_lms[i]))
-        """
-
-        with open('tmp/lang/samples_A_{}.txt'.format(iteration), 'w') as f:
+        
+        with open(DATA_DIR+'/generate_A_{}.txt'.format(iteration+1), 'w') as f:    
             for s in samples1:
                 s = "".join(s)
-                f.write(s + "\n")
-        with open('tmp/lang/samples_B_{}.txt'.format(iteration), 'w') as f:
+                f.write(s+"\n")
+        
+        with open(DATA_DIR+'/generate_B_{}.txt'.format(iteration+1), 'w') as f:
             for s in samples2:
                 s = "".join(s)
                 f.write(s + "\n")
+        
 
     if iteration % 100 == 99:
         lib.plot.flush()
