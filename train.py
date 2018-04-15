@@ -28,7 +28,6 @@ DATA_DIR = '/Volumes/Transcend/text'
 
 fn1 = '1class8.txt'
 fn2 = '3class12.txt'
-#fn2 = '68_linkedin_found_hash_plain.txt'
 
 if len(DATA_DIR) == 0:
     raise Exception('Please specify path to data directory in gan_language.py!')
@@ -65,7 +64,7 @@ except:
         pickle.dump({'lines':lines1, 'charmap':charmap1, 'inv_charmap':inv_charmap1}, f)
 #print(charmap1)
 
-try:                  ### Change for real test!!!###
+try:                  
     with open(DATA_DIR+'/3class12.dump', 'rb') as f:
         p = pickle.load(f)
         lines2 = p['lines']
@@ -80,7 +79,6 @@ except:
     )
     with open(DATA_DIR+"/3class12.dump", 'wb') as f:
         pickle.dump({'lines':lines2, 'charmap':charmap2, 'inv_charmap':inv_charmap2}, f)
-#print(charmap2)
 
 table1 = np.arange(len(charmap1)).reshape(-1, 1) # (len(charmap), 1)
 one_hot1 = OneHotEncoder()
@@ -120,7 +118,6 @@ def calc_gradient_penalty(netD, real_data, fake_data):
 
     disc_interpolates = netD(interpolates)
 
-    # TODO: Make ConvBackward diffentiable
     gradients = autograd.grad(outputs=disc_interpolates, inputs=interpolates,
                               grad_outputs=torch.ones(disc_interpolates.size()).cuda(gpu) if use_cuda else torch.ones(
                                   disc_interpolates.size()),
@@ -132,31 +129,18 @@ def calc_gradient_penalty(netD, real_data, fake_data):
 def generate_samples(netG, charmap, inv_charmap, nv):
     samples1 = netG(noisev)
     samples1 = samples1.view(-1, SEQ_LEN, len(charmap))
-    #samples2 = netG2(noisev)
-    #samples2 = samples2.view(-1, SEQ_LEN, len(charmap2))
-    # print samples.size()
 
     samples1 = samples1.cpu().data.numpy()
-    #samples2 = samples2.cpu().data.numpy()
-
     samples1 = np.argmax(samples1, axis=2)
-    #samples2 = np.argmax(samples2, axis=2)
     
     decoded_samples1 = []
-    #decoded_samples2 = []
     for i in range(len(samples1)):
         decoded1 = []
         for j in range(len(samples1[i])):
             decoded1.append(inv_charmap[samples1[i][j]])
         decoded_samples1.append(tuple(decoded1))
-
-    #for i in range(len(samples2)):
-        #decoded2 = []
-        #for j in range(len(samples2[i])):
-            #decoded2.append(inv_charmap2[samples2[i][j]])
-        #decoded_samples2.append(tuple(decoded2))
     
-    return decoded_samples1#, decoded_samples2
+    return decoded_samples1
 
 # ==================Definition End======================
 
@@ -164,8 +148,6 @@ netG_A = Generator_A(charmap1)
 netG_B = Generator_B(charmap2)
 netD_A = Discriminator_A(charmap1)
 netD_B = Discriminator_B(charmap2)
-#print netG
-#rint netD
 
 if use_cuda:
     netD_A = netD_A.cuda(gpu)
