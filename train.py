@@ -22,9 +22,7 @@ use_cuda = torch.cuda.is_available()
 if use_cuda:
     gpu = 0
 
-# Download Google Billion Word at http://www.statmt.org/lm-benchmark/ and
-# fill in the path to the extracted files here!
-DATA_DIR = '/Volumes/Transcend/text'
+DATA_DIR = './data'
 
 fn1 = '1class8.txt'
 fn2 = '3class12.txt'
@@ -100,6 +98,7 @@ def inf_train_gen(lines, charmap):
     while True:
         np.random.shuffle(lines)
         for i in range(0, len(lines)-BATCH_SIZE+1, BATCH_SIZE):
+            #print(lines[i:i+BATCH_SIZE])
             yield np.array(
                 [[charmap[c] for c in l] for l in lines[i:i+BATCH_SIZE]],
                 dtype='int32'
@@ -207,36 +206,25 @@ for iteration in range(ITERS):
     for p in netD_A.parameters():  # reset requires_grad
         p.requires_grad = True  # they are set to False below in netG update
 
-    for p in netD_B.parameters():  # reset requires_grad
-        p.requires_grad = True
-
     for iter_d in range(CRITIC_ITERS):
         _data_A = next(data_A)
-        _data_B = next(data_B)
         
         data_one_hot_A = one_hot1.transform(_data_A.reshape(-1, 1)).toarray().reshape(BATCH_SIZE, -1, len(charmap1))
-        data_one_hot_B = one_hot2.transform(_data_B.reshape(-1, 1)).toarray().reshape(BATCH_SIZE, -1, len(charmap2))
         #print data_one_hot.shape
         real_data_A = torch.Tensor(data_one_hot_A)
-        real_data_B = torch.Tensor(data_one_hot_B)
         if use_cuda:
             real_data_A = real_data_A.cuda(gpu)
-            real_data_B = real_data_A.cuda(gpu)
+            
         real_data_A_v = autograd.Variable(real_data_A)
-        real_data_B_v = autograd.Variable(real_data_B)
 
         netD_A.zero_grad()
-        netD_B.zero_grad()
 
         # train with real
         D_real_A = netD_A(real_data_A_v)
         D_real_A = D_real_A.mean()
-        D_real_B = netD_B(real_data_B_v)
-        D_real_B = D_real_B.mean()
         # print D_real
         # TODO: Waiting for the bug fix from pytorch
         D_real_A.backward(mone)
-        D_real_B.backward(mone)
 
         # train with fake
         noise = torch.randn(BATCH_SIZE, 128)
@@ -244,42 +232,29 @@ for iteration in range(ITERS):
             noise = noise.cuda(gpu)
         noisev = autograd.Variable(noise, volatile=True)  # totally freeze netG
         fake_A = autograd.Variable(netG_A(noisev).data)
-        fake_B = autograd.Variable(netG_B(noisev).data)
 
         inputAv = fake_A
         D_fake_A = netD_A(inputAv)
         D_fake_A = D_fake_A.mean()
-        inputBv = fake_B
-        D_fake_B = netD_B(inputBv)
-        D_fake_B = D_fake_B.mean()
         # TODO: Waiting for the bug fix from pytorch
         D_fake_A.backward(one)
-        D_fake_B.backward(one)
 
         # train with gradient penalty
         gradient_penalty_A = calc_gradient_penalty(netD_A, real_data_A_v.data, fake_A.data)
         gradient_penalty_A.backward()
-        gradient_penalty_B = calc_gradient_penalty(netD_B, real_data_B_v.data, fake_B.data)
-        gradient_penalty_B.backward()
 
         D_cost_A = D_fake_A - D_real_A + gradient_penalty_A
         Wasserstein_D_A = D_real_A - D_fake_A
-        D_cost_B = D_fake_B - D_real_B + gradient_penalty_B
-        Wasserstein_D_B = D_real_B - D_fake_B
 
         optimizerD_A.step()
-        optimizerD_B.step()
 
     ############################
     # (2) Update G network
     ###########################
     for p in netD_A.parameters():
         p.requires_grad = False  # to avoid computation
-    for p in netD_B.parameters():
-        p.requires_grad = False
 
     netG_A.zero_grad()
-    netG_B.zero_grad()
 
     noise = torch.randn(BATCH_SIZE, 128)
     if use_cuda:
@@ -292,29 +267,18 @@ for iteration in range(ITERS):
     G_A.backward(mone)
     G_cost_A = -G_A
 
-    fake_B = netG_B(noisev)
-    G_B = netD_B(fake_B)
-    G_B = G_B.mean()
-    G_B.backward(mone)
-    G_cost_B = -G_B
-
     optimizerG_A.step()
-    optimizerG_B.step()
 
     # Write logs and save samples
-    lib.plot.plot('tmp/lang/time', time.time() - start_time)
+    lib.plot.plot('tmp/lang/time_A', time.time() - start_time)
     lib.plot.plot('tmp/lang/train Discriminator_A cost', D_cost_A.cpu().data.numpy())
-    lib.plot.plot('tmp/lang/train Discriminator_B cost', D_cost_B.cpu().data.numpy())
     lib.plot.plot('tmp/lang/train Generator_A cost', G_cost_A.cpu().data.numpy())
-    lib.plot.plot('tmp/lang/train Generator_B cost', G_cost_B.cpu().data.numpy())
     lib.plot.plot('tmp/lang/wasserstein distance A', Wasserstein_D_A.cpu().data.numpy())
-    lib.plot.plot('tmp/lang/wasserstein distance B', Wasserstein_D_B.cpu().data.numpy())
 
                      
     if iteration % 100 == 99:
-        print(iteration+1)
+        print("A : %d"%(iteration+1))
         samples1 = []
-        samples2 = []
         noise = torch.randn(BATCH_SIZE, 128)
         if use_cuda:
             noise = noise.cuda(gpu)
@@ -322,18 +286,118 @@ for iteration in range(ITERS):
         
         for i in range(10):
             samples1.extend(generate_samples(netG_A, charmap1, inv_charmap1, noisev))
-            samples2.extend(generate_samples(netG_B, charmap2, inv_charmap2, noisev))
         
         with open(DATA_DIR+'/generate_A_{}.txt'.format(iteration+1), 'w') as f:    
             for s in samples1:
                 s = "".join(s)
                 f.write(s+"\n")
         
+        #torch.save(model.state_dict(), 'model.pkl')
+        torch.save(netG_A.state_dict(),'Generator_A.pt')
+        torch.save(netD_A.state_dict(),'Discriminator_A.pt')
+
+    if iteration % 100 == 99:
+        lib.plot.flush()
+    lib.plot.tick()
+
+
+for iteration in range(ITERS):
+    start_time = time.time()
+    ############################
+    # (1) Update D network
+    ###########################
+
+    for p in netD_B.parameters():  # reset requires_grad
+        p.requires_grad = True
+
+    for iter_d in range(CRITIC_ITERS):
+        _data_B = next(data_B)
+        
+        data_one_hot_B = one_hot2.transform(_data_B.reshape(-1, 1)).toarray().reshape(BATCH_SIZE, -1, len(charmap2))
+        #print data_one_hot.shape
+        real_data_B = torch.Tensor(data_one_hot_B)
+        if use_cuda:
+            real_data_B = real_data_A.cuda(gpu)
+        real_data_B_v = autograd.Variable(real_data_B)
+
+        netD_B.zero_grad()
+
+        # train with real
+        D_real_B = netD_B(real_data_B_v)
+        D_real_B = D_real_B.mean()
+        # print D_real
+        # TODO: Waiting for the bug fix from pytorch
+        D_real_B.backward(mone)
+
+        # train with fake
+        noise = torch.randn(BATCH_SIZE, 128)
+        if use_cuda:
+            noise = noise.cuda(gpu)
+        noisev = autograd.Variable(noise, volatile=True)  # totally freeze netG
+        fake_B = autograd.Variable(netG_B(noisev).data)
+
+        inputBv = fake_B
+        D_fake_B = netD_B(inputBv)
+        D_fake_B = D_fake_B.mean()
+        # TODO: Waiting for the bug fix from pytorch
+        D_fake_B.backward(one)
+
+        # train with gradient penalty
+        gradient_penalty_B = calc_gradient_penalty(netD_B, real_data_B_v.data, fake_B.data)
+        gradient_penalty_B.backward()
+
+        D_cost_B = D_fake_B - D_real_B + gradient_penalty_B
+        Wasserstein_D_B = D_real_B - D_fake_B
+
+        optimizerD_B.step()
+
+    ############################
+    # (2) Update G network
+    ###########################
+    for p in netD_B.parameters():
+        p.requires_grad = False
+
+    netG_B.zero_grad()
+
+    noise = torch.randn(BATCH_SIZE, 128)
+    if use_cuda:
+        noise = noise.cuda(gpu)
+    noisev = autograd.Variable(noise)
+
+    fake_B = netG_B(noisev)
+    G_B = netD_B(fake_B)
+    G_B = G_B.mean()
+    G_B.backward(mone)
+    G_cost_B = -G_B
+
+    optimizerG_B.step()
+
+    # Write logs and save samples
+    lib.plot.plot('tmp/lang/time_B', time.time() - start_time)
+    lib.plot.plot('tmp/lang/train Discriminator_B cost', D_cost_B.cpu().data.numpy())
+    lib.plot.plot('tmp/lang/train Generator_B cost', G_cost_B.cpu().data.numpy())
+    lib.plot.plot('tmp/lang/wasserstein distance B', Wasserstein_D_B.cpu().data.numpy())
+
+                     
+    if iteration % 100 == 99:
+        print("B : %d"%(iteration+1))
+        samples2 = []
+        noise = torch.randn(BATCH_SIZE, 128)
+        if use_cuda:
+            noise = noise.cuda(gpu)
+        noisev = autograd.Variable(noise, volatile=True)
+        
+        for i in range(10):
+            samples2.extend(generate_samples(netG_B, charmap2, inv_charmap2, noisev))
+        
         with open(DATA_DIR+'/generate_B_{}.txt'.format(iteration+1), 'w') as f:
             for s in samples2:
                 s = "".join(s)
                 f.write(s + "\n")
         
+        #torch.save(model.state_dict(), 'model.pkl')
+        torch.save(netG_B.state_dict(), 'Generator_B.pt')
+        torch.save(netD_B.state_dict(), 'Discriminator_B.pt')
 
     if iteration % 100 == 99:
         lib.plot.flush()
