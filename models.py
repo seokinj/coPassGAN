@@ -5,6 +5,8 @@ import torch.nn as nn
 BATCH_SIZE = 64
 DIM = 128
 SEQ_LEN = 12
+torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
 
 class ResBlock(nn.Module):
 
