@@ -92,11 +92,6 @@ one_hot2.fit(table2)
 
 # ==================Definition Start======================
 
-def make_noise(shape, volatile=False):
-    tensor = torch.randn(shape).cuda(gpu) if use_cuda else torch.randn(shape)
-    return autograd.Variable(tensor, volatile)
-
-
 # Dataset iterator
 def inf_train_gen(lines, charmap):
     while True:
@@ -240,10 +235,11 @@ for iteration in range(ITERS):
         noise = torch.randn(BATCH_SIZE, 128)
         if use_cuda:
             noise = noise.cuda()
-        noisev = autograd.Variable(noise, volatile=True)  # totally freeze netG
+        #noisev = autograd.Variable(noise, volatile=True)  # totally freeze netG
         with torch.no_grad():
-                #fake_A = autograd.Variable(netG_A(noisev).data)
-                fake_B = autograd.Variable(netG_B(noisev).data)
+            noisev = autograd.Variable(noise)        
+        #fake_A = autograd.Variable(netG_A(noisev).data)
+        fake_B = autograd.Variable(netG_B(noisev).data)
 
         #inputAv = fake_A
         #D_fake_A = netD_A(inputAv)
@@ -317,11 +313,12 @@ for iteration in range(ITERS):
         noise = torch.randn(BATCH_SIZE, 128)
         if use_cuda:
             noise = noise.cuda(gpu)
-        noisev = autograd.Variable(noise, volatile=True)
+        #noisev = autograd.Variable(noise, volatile=True)
         with torch.no_grad():
-            for i in range(10):
-                #samples1.extend(generate_samples(netG_A, charmap1, inv_charmap1, noisev))
-                samples2.extend(generate_samples(netG_B, charmap2, inv_charmap2, noisev))
+            noisev = autograd.Variable(noise)
+        for i in range(10):
+            #samples1.extend(generate_samples(netG_A, charmap1, inv_charmap1, noisev))
+            samples2.extend(generate_samples(netG_B, charmap2, inv_charmap2, noisev))
         """
         with open(DATA_DIR+'/test/generate_A_{}.txt'.format(iteration+1), 'w') as f:    
             for s in samples1:
